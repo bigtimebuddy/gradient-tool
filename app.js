@@ -2,8 +2,18 @@
 const {Component, render, h} = preact;
 
 /**
+ * Wrapper for font awesome icons
+ * @class
+ */
+class Icon extends Component {
+    render({type}) {
+        return h('i', { class: `fa fa-${type} mr-2` });
+    }
+}
+
+/**
  * Main application point
- * 
+ * @class
  */
 class App extends Component {
     constructor(props) {
@@ -12,22 +22,29 @@ class App extends Component {
         this.ctx = null;
         this.codeOutput = null;
         this.imageOutput = null;
-        this.state = {
-            width: App.DEFAULT_SIZE,
-            height: App.DEFAULT_SIZE,
-            colors: [
-                {
-                    color: "#ffffff",
-                    alpha: 1,
-                    stop: 0
-                },
-                {
-                    color: "#000000",
-                    alpha: 1,
-                    stop: 1
-                }
-            ]
-        };
+
+        const gradient = localStorage.getItem('gradient');
+        if (gradient) {
+            this.state = JSON.parse(gradient);
+        }
+        else {
+            this.state = {
+                width: App.DEFAULT_SIZE,
+                height: App.DEFAULT_SIZE,
+                colors: [
+                    {
+                        color: "#ffffff",
+                        alpha: 1,
+                        stop: 0
+                    },
+                    {
+                        color: "#000000",
+                        alpha: 1,
+                        stop: 1
+                    }
+                ]
+            };
+        }
     }
 
     /**
@@ -69,6 +86,7 @@ class App extends Component {
      */
     componentDidUpdate() {
         this.redraw();
+        localStorage.setItem('gradient', JSON.stringify(this.state));
     }
 
     /**
@@ -135,8 +153,14 @@ class App extends Component {
         this.setState({ height: parseInt(e.currentTarget.value) });
     }
 
+    /**
+     * Handle changes to color values
+     * @param {number} i 
+     * @param {Event} e 
+     */
     onColor(i, e) {
         const {value} = e.currentTarget;
+        // Ignore invalid colors
         if (!/^#[a-f0-9]{6}$/i.test(value)) {
             return;
         }
@@ -145,22 +169,38 @@ class App extends Component {
         this.forceUpdate();
     }
 
+    /**
+     * Handle changes to alphas
+     * @param {number} i 
+     * @param {Event} e 
+     */
     onAlpha(i, e) {
         this.state.colors[i].alpha = parseFloat(e.currentTarget.value);
         this.forceUpdate();
     }
 
+    /**
+     * Handle changes to stops
+     * @param {number} i 
+     * @param {Event} e 
+     */
     onStop(i, e) {
         this.state.colors[i].stop = parseFloat(e.currentTarget.value);
         this.forceUpdate();
     }
 
+    /**
+     * Remove a color
+     */
     onRemove(i) {
         const colors = this.state.colors;
         colors.splice(i, 1);
         this.setState({ colors });
     }
 
+    /**
+     * Add a new color
+     */
     onAdd() {
         this.state.colors.push({
             color: "#ffffff",
@@ -171,46 +211,59 @@ class App extends Component {
     }
 
     /**
+     * Reverse the colors
+     */
+    onReverse() {
+        this.state.colors.forEach((item) => {
+            item.stop = 1 - item.stop;
+        });
+        this.redraw();
+        this.forceUpdate();
+    }
+
+    /**
      * Render
      */
     render(props, { width, height, colors }) {
         return h('main', { class: 'container' },
             h('div', { class: 'row py-4' }, [
                 h('div', { class: 'col-sm-8'}, [
-                    h('h2', { class: 'mb-2' }, 'Preview'),
-                    h('div', { class: 'input-group d-flex mb-2' }, [
-                        h('div', { class: 'input-group-prepend w-50' }, [
-                            h('span', { class: 'input-group-text w-100' }, 'Width')
+                    h('h2', { class: 'mb-2' },  [ h(Icon, {type: 'cog'}), 'Gradient']),
+                    h('div', { class: 'd-flex mb-2' }, [
+                        h('div', { class: 'input-group d-flex mr-1' }, [
+                            h('div', { class: 'input-group-prepend' }, [
+                                h('span', { class: 'input-group-text' }, 'Width')
+                            ]),
+                            h('select', {
+                                class: 'custom-select',
+                                onChange: this.onWidth.bind(this)
+                            }, App.SIZES.map((size) => {
+                                return h('option', {
+                                    value: size,
+                                    selected: (size === width)
+                                }, size);
+                            }))
                         ]),
-                        h('select', {
-                            class: 'custom-select',
-                            onChange: this.onWidth.bind(this)
-                        }, App.SIZES.map((size) => {
-                            return h('option', {
-                                value: size,
-                                selected: (size === width)
-                            }, size);
-                        }))
-                    ]),
-                    h('div', { class: 'input-group d-flex mb-2' }, [
-                        h('div', { class: 'input-group-prepend w-50' }, [
-                            h('span', { class: 'input-group-text w-100' }, 'Height')
-                        ]),
-                        h('select', {
-                            class: 'custom-select',
-                            onChange: this.onHeight.bind(this)
-                        }, App.SIZES.map((size) => {
-                            return h('option', {
-                                value: size,
-                                selected: (size === height)
-                            }, size);
-                        }))
+                        h('div', { class: 'input-group d-flex ml-1' }, [
+                            h('div', { class: 'input-group-prepend' }, [
+                                h('span', { class: 'input-group-text' }, 'Height')
+                            ]),
+                            h('select', {
+                                class: 'custom-select',
+                                onChange: this.onHeight.bind(this)
+                            }, App.SIZES.map((size) => {
+                                return h('option', {
+                                    value: size,
+                                    selected: (size === height)
+                                }, size);
+                            }))
+                        ])
                     ]),
                     h('div', { class: 'canvas-container bg-white rounded mb-2' },
                         h('canvas',{ ref: this.refCanvas.bind(this) })
                     )
                 ].concat(colors.map((item, i) => {
-                    return h('div', { class: 'color-item border bg-white rounded p-3 mb-4'}, [
+                    return h('div', { class: 'color-item border bg-white rounded p-3 mb-2'}, [
                         h('div', { class: 'text-right '},
                             h('button', {
                                 class: 'btn close mb-2',
@@ -218,59 +271,71 @@ class App extends Component {
                             }, '×')
                         ),
                         h('div', { class: 'input-group d-flex mb-2' }, [
-                            h('div', { class: 'input-group-prepend w-50' }, [
-                                h('span', { class: 'input-group-text w-100' }, 'Color')
+                            h('div', { class: 'input-group-prepend' }, [
+                                h('span', { class: 'input-group-text' }, 'Color')
                             ]),
                             h('input', {
                                 type: 'color',
-                                class: 'form-control',
+                                class: 'form-control colorpicker',
                                 value: item.color,
                                 onInput: this.onColor.bind(this, i)
                             })
                         ]),
                         h('div', { class: 'input-group d-flex mb-2' }, [
-                            h('div', { class: 'input-group-prepend w-50' }, [
-                                h('span', { class: 'input-group-text w-100' }, 'Alpha')
+                            h('div', { class: 'input-group-prepend' }, [
+                                h('span', { class: 'input-group-text' }, 'Alpha')
                             ]),
                             h('input', {
                                 type: 'range',
                                 step: 0.01,
                                 min: 0,
                                 max: 1,
-                                class: 'custom-range w-50 bg-white rounded-right border px-2',
+                                class: 'custom-range range bg-white rounded-right border px-2',
                                 value: item.alpha,
                                 onInput: this.onAlpha.bind(this, i)
-                            })
+                            }),
+                            h('div', { class: 'input-group-append' }, [
+                                h('span', { class: 'input-group-text' }, item.alpha.toPrecision(2))
+                            ])
                         ]),
                         h('div', { class: 'input-group d-flex' }, [
-                            h('div', { class: 'input-group-prepend w-50' }, [
-                                h('span', { class: 'input-group-text w-100' }, 'Stop')
+                            h('div', { class: 'input-group-prepend' }, [
+                                h('span', { class: 'input-group-text' }, 'Stop')
                             ]),
                             h('input', {
                                 type: 'range',
                                 step: 0.01,
                                 min: 0,
                                 max: 1,
-                                class: 'custom-range w-50 bg-white rounded-right border px-2',
+                                class: 'custom-range range bg-white rounded-right border px-2',
                                 value: item.stop,
                                 onInput: this.onStop.bind(this, i)
-                            })
+                            }),
+                            h('div', { class: 'input-group-append' }, [
+                                h('span', { class: 'input-group-text' }, item.stop.toPrecision(2))
+                            ])
                         ])
                     ]);
                 })), [
-                    h('button', {
-                        class: 'btn mx-auto d-block btn-primary',
-                        onClick: this.onAdd.bind(this)
-                    }, 'Add Color')
+                    h('div', { class: 'text-center mb-4' }, [
+                        h('button', {
+                            class: 'btn btn-primary mr-2',
+                            onClick: this.onAdd.bind(this)
+                        }, [h(Icon, { type: 'plus' }), 'Add Color']),
+                        h('button', {
+                            class: 'btn btn-primary',
+                            onClick: this.onReverse.bind(this)
+                        }, [h(Icon, { type: 'sort' }), 'Reverse'])
+                    ])
                 ]),
                 h('div', { class: 'col-sm-4'}, [
                     h('button', {
-                        class: 'btn btn-sm btn-secondary float-right px-3',
+                        class: 'btn btn-sm btn-secondary float-right',
                         onClick: () => {
                             this.copy(this.imageOutput.innerHTML);
                         }
-                    }, 'Copy'),
-                    h('h2', { class: 'mb-2' }, 'Base64 Image'),
+                    }, [h(Icon, {type: 'clipboard' }),'Copy']),
+                    h('h2', { class: 'mb-2' }, [ h(Icon, {type: 'image'}), 'Image']),
                     h('textarea', {
                         spellcheck: false,
                         class: 'form-control output mb-4',
@@ -278,12 +343,12 @@ class App extends Component {
                     }),
                     h('hr'),
                     h('button', {
-                        class: 'btn btn-sm btn-secondary float-right px-3',
+                        class: 'btn btn-sm btn-secondary float-right',
                         onClick: () => {
                             this.copy(this.codeOutput.innerHTML);
                         }
-                    }, 'Copy'),
-                    h('h2', { class: 'mb-2' }, 'Gradient Code'),
+                    }, [h(Icon, { type: 'clipboard' }),'Copy']),
+                    h('h2', { class: 'mb-2' }, [ h(Icon, {type: 'code'}), 'Code' ]),
                     h('code', {
                         class: 'code-output d-block border bg-white rounded p-2',
                         ref: this.refCode.bind(this)
@@ -294,7 +359,16 @@ class App extends Component {
     }
 }
 
-App.SIZES = [4,8,16,32,64,128,256];
+/**
+ * The collection of sizes, using POT
+ * @static
+ */
+App.SIZES = [4,8,16,32,64,128,256,512];
+
+/**
+ * The default size applied to width and height
+ * @static
+ */
 App.DEFAULT_SIZE = 128;
 
 render(h(App), document.body);

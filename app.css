@@ -34,4 +34,14 @@ h2 {
 
 .code-output {
     white-space: pre !important;
+    overflow:hidden;
+}
+
+.input-group-text {
+    width: 70px;
+    font-size: 12px;
+}
+
+input.range {
+    width: calc(100% - 140px);
 }
