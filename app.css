@@ -1,0 +1,37 @@
+body {
+    margin:0;
+    padding:0;
+    font-family:"Neflix Sans", "NetflixSans", Arial, sans-serif;
+    background:#f1f1f1;
+}
+.canvas-container {
+    min-height:256px;
+    position:relative;
+    border:1px solid #ddd;
+    overflow: hidden;
+    background-image: linear-gradient(45deg, #eee 25%, transparent 25%),
+        linear-gradient(-45deg, #eee 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #eee 75%),
+        linear-gradient(-45deg, transparent 75%, #eee 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+}
+canvas {
+    top:50%;
+    left:50%;
+    position:absolute;
+    transform: translate(-50%, -50%);
+}
+.output {
+    font-size: 14px;
+    min-height: 260px;
+    overflow: hidden;
+}
+h2 {
+    font-weight:bold;
+    font-size: 24px;
+}
+
+.code-output {
+    white-space: pre !important;
+}
