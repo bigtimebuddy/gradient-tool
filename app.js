@@ -6,8 +6,8 @@ const {Component, render, h} = preact;
  * @class
  */
 class Icon extends Component {
-    render({type}) {
-        return h('i', { class: `fa fa-${type} mr-2` });
+    render({ type, solo }) {
+        return h('i', { class: `fa fa-${type} ${solo ? '': 'mr-2'}` });
     }
 }
 
@@ -18,9 +18,28 @@ class Icon extends Component {
 class App extends Component {
     constructor(props) {
         super(props);
+        /**
+         * Canvas element
+         * @member {HTMLCanvasElement}
+         */
         this.canvas = null;
+
+        /**
+         * Render context
+         * @member {Context2dRenderingContext}
+         */
         this.ctx = null;
+
+        /**
+         * Code container output
+         * @member {HTMLElement}
+         */
         this.codeOutput = null;
+
+        /**
+         * Textarea output
+         * @member {HTMLElement}
+         */
         this.imageOutput = null;
 
         const gradient = localStorage.getItem('gradient');
@@ -28,23 +47,32 @@ class App extends Component {
             this.state = JSON.parse(gradient);
         }
         else {
-            this.state = {
-                width: App.DEFAULT_SIZE,
-                height: App.DEFAULT_SIZE,
-                colors: [
-                    {
-                        color: "#ffffff",
-                        alpha: 1,
-                        stop: 0
-                    },
-                    {
-                        color: "#000000",
-                        alpha: 1,
-                        stop: 1
-                    }
-                ]
-            };
+            this.state = this.defaultState;
         }
+    }
+
+    /**
+     * Get the default state
+     * @member {object}
+     */
+    get defaultState() {
+        return {
+            width: App.DEFAULT_SIZE,
+            height: App.DEFAULT_SIZE,
+            horizontal: true,
+            colors: [
+                {
+                    color: "#ffffff",
+                    alpha: 1,
+                    stop: 0
+                },
+                {
+                    color: "#000000",
+                    alpha: 1,
+                    stop: 1
+                }
+            ]
+        };
     }
 
     /**
@@ -93,8 +121,14 @@ class App extends Component {
      * Re-render the gradient
      */
     redraw() {
-        const {width, height, colors} = this.state;
-        const gradient = this.ctx.createLinearGradient(0, 0, width, 0);
+        const {width, height, colors, horizontal} = this.state;
+        let gradient;
+        if (horizontal !== false) {
+            gradient = this.ctx.createLinearGradient(0, 0, width, 0);
+        }
+        else {
+            gradient = this.ctx.createLinearGradient(0, 0, 0, height);
+        }
         colors.forEach(({stop, color, alpha}) => {
             if (alpha === 1) {
                 gradient.addColorStop(stop, color);
@@ -222,9 +256,25 @@ class App extends Component {
     }
 
     /**
+     * Set horizontal
+     */
+    onHorizontal(horizontal) {
+        this.setState({ horizontal });
+    }
+
+    /**
+     * Reset
+     */
+    onReset() {
+        if (confirm('Do you want to reset to default?')) {
+            this.setState(this.defaultState);
+        }
+    }
+
+    /**
      * Render
      */
-    render(props, { width, height, colors }) {
+    render(props, { width, height, colors, horizontal }) {
         return h('main', { class: 'container' },
             h('div', { class: 'row py-4' }, [
                 h('div', { class: 'col-sm-8'}, [
@@ -259,9 +309,20 @@ class App extends Component {
                             }))
                         ])
                     ]),
-                    h('div', { class: 'canvas-container bg-white rounded mb-2' },
+                    h('div', { class: 'canvas-container bg-white rounded mb-2' }, [
+                        h('div', { class: 'canvas-controls'}, [
+                            h('button', {
+                                class: `btn btn-sm btn-outline-secondary ${horizontal !== false ? 'active' : ''}`,
+                                onClick: this.onHorizontal.bind(this, true)
+                            }, h(Icon, {type: 'arrows-h', solo: true })),
+                            h('button', {
+                                class: `btn btn-sm btn-outline-secondary ${horizontal === false ? 'active' : '' }`,
+                                onClick: this.onHorizontal.bind(this, false)
+                            }, h(Icon, {type: 'arrows-v', solo: true })),
+                            h('button', { class: 'btn btn-sm btn-outline-secondary', onClick: this.onReset.bind(this) }, h(Icon, {type: 'refresh', solo: true }))
+                        ]),
                         h('canvas',{ ref: this.refCanvas.bind(this) })
-                    )
+                    ])
                 ].concat(colors.map((item, i) => {
                     return h('div', { class: 'color-item border bg-white rounded p-3 mb-2'}, [
                         h('div', { class: 'text-right '},
@@ -371,4 +432,5 @@ App.SIZES = [4,8,16,32,64,128,256,512];
  */
 App.DEFAULT_SIZE = 128;
 
+// Render application
 render(h(App), document.body);
