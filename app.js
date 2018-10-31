@@ -313,8 +313,13 @@ class App extends Component {
      * Set the active element
      */
     onSelect(index, type) {
-        const active = { index, type };
-        this.setState({ active });
+        const {active} = this.state;
+        if (active && active.index === index && active.type === type) {
+            this.onDeselect();
+        }
+        else {
+            this.setState({ active: { index, type } });
+        }
     }
 
     /**

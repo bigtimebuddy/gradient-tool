@@ -3,6 +3,7 @@ body {
     padding:0;
     font-family:"Neflix Sans", "NetflixSans", Arial, sans-serif;
     background:#e5e8ea;
+    user-select: none;
 }
 .canvas-container {
     min-height:256px;
