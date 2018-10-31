@@ -42,9 +42,16 @@ class App extends Component {
          */
         this.imageRef = null;
 
+        /**
+         * Output string
+         * @member {string}
+         */
+        this.colorpickerRef = null;
+
         const gradient = localStorage.getItem(App.SAVE_KEY);
         if (gradient) {
             this.state = JSON.parse(gradient);
+            this.state.active = null;
         }
         else {
             this.state = this.defaultState;
@@ -318,6 +325,11 @@ class App extends Component {
             this.onDeselect();
         }
         else {
+            // If we select the color picker
+            if (type === 'color') {
+                this.colorpickerRef.value = this.state[type][index].value;
+                this.colorpickerRef.click();
+            }
             this.setState({ active: { index, type } });
         }
     }
@@ -333,6 +345,7 @@ class App extends Component {
      * Render
      */
     render(props, { width, height, color, alpha, active, horizontal }) {
+        console.log(active);
         return h('main', { class: 'container' },
             h('div', { class: 'row py-4' }, [
                 h('div', { class: 'col-sm-8 offset-sm-2'}, [
@@ -395,7 +408,7 @@ class App extends Component {
                     h('div', { class: 'gradient-bar' }, [
                         h('canvas', {
                             ref: this.refPreview.bind(this),
-                            class: 'gradient-bar-image checked border border-secondary rounded'
+                            class: 'gradient-bar-image checked rounded'
                         }),
                         h('div', {
                             class: 'swatch-container color',
@@ -424,43 +437,37 @@ class App extends Component {
                             }))
                         )
                     ]),
-                    (active && h('div', { class: 'border rounded p-2 my-2 bg-white mx-auto w-50'}, [
+                    h('input', {
+                        ref: (input) => {
+                            this.colorpickerRef = input;
+                        },
+                        type: 'color',
+                        class: 'colorpicker invisible',
+                        value: active && active.type === 'color' ? color[active.index].value : '#ffffff',
+                        onInput: active && active.type === 'color' ? this.onValue.bind(this, active.index, active.type) : null
+                    }),
+                    (active && active.type === 'alpha' && h('div', { class: 'border rounded p-2 bg-white mx-auto w-50'}, [
                         h('button', {
                             class: 'btn btn-sm small close mb-2',
                             onClick: this.onDeselect.bind(this)
                         }, h('small', null, h(Icon, {type: 'close'}))),
-                        (active.type === 'color' && h('div', null, [
-                            h('div', { class: 'input-group d-flex mb-2' }, [
-                                h('div', { class: 'input-group-prepend' }, [
-                                    h('span', { class: 'input-group-text sm' }, 'Color')
-                                ]),
-                                h('input', {
-                                    type: 'color',
-                                    class: 'form-control colorpicker',
-                                    value: color[active.index].value,
-                                    onInput: this.onValue.bind(this, active.index, active.type)
-                                })
+                        h('div', { class: 'input-group d-flex mb-2' }, [
+                            h('div', { class: 'input-group-prepend' }, [
+                                h('span', { class: 'input-group-text sm' }, 'Alpha')
+                            ]),
+                            h('input', {
+                                type: 'range',
+                                step: 0.01,
+                                min: 0,
+                                max: 1,
+                                class: 'custom-range range bg-white rounded-right border px-2',
+                                value: alpha[active.index].value,
+                                onInput: this.onValue.bind(this, active.index, active.type)
+                            }),
+                            h('div', { class: 'input-group-append' }, [
+                                h('span', { class: 'input-group-text sm' }, alpha[active.index].value.toPrecision(2))
                             ])
-                        ])),
-                        (active.type === 'alpha' && h('div', null, [
-                            h('div', { class: 'input-group d-flex mb-2' }, [
-                                h('div', { class: 'input-group-prepend' }, [
-                                    h('span', { class: 'input-group-text sm' }, 'Alpha')
-                                ]),
-                                h('input', {
-                                    type: 'range',
-                                    step: 0.01,
-                                    min: 0,
-                                    max: 1,
-                                    class: 'custom-range range bg-white rounded-right border px-2',
-                                    value: alpha[active.index].value,
-                                    onInput: this.onValue.bind(this, active.index, active.type)
-                                }),
-                                h('div', { class: 'input-group-append' }, [
-                                    h('span', { class: 'input-group-text sm' }, alpha[active.index].value.toPrecision(2))
-                                ])
-                            ])
-                        ]))
+                        ])
                     ]))
                 ])
             ]),
@@ -518,7 +525,14 @@ class Output extends Component {
                 onClick: this.copy.bind(this)
             }, h(Icon, { type: 'clipboard', solo: true })),
             h('h2', { class: 'mb-2' }, [ h(Icon, {type: icon }), title ]),
-            h('textarea', { class: 'form-control code-output'}, value)
+            h('textarea', {
+                class: 'form-control code-output',
+                spellcheck: false,
+                onClick: (event) => {
+                    event.target.focus();
+                    event.target.select();
+                }
+            }, value)
         ]);
     }
 }
@@ -573,16 +587,23 @@ class GradientSwatch extends Component {
             const {onSelect, index, type} = this.props;
             onSelect(index, type);
         }
-        else {
-            const parent = this.base.parentNode;
-            const bounds = parent.getBoundingClientRect();
-            const buffer = GradientSwatch.DELETE_BUFFER;
-            if ((this.isColor && event.clientY > bounds.bottom + buffer)
-                || (!this.isColor && event.clientY < bounds.top - buffer)) {
-                const {onRemove, index, type} = this.props;
-                onRemove(index, type);
-            }
+        else if (this.isRemovable(event.clientY)) {
+            const {onRemove, index, type} = this.props;
+            onRemove(index, type);
         }
+    }
+
+    /**
+     * Check to see if a swatch is removable based on the y position
+     * @param {number} y - Client X position
+     * @return {boolean} `true` if can be removed
+     */
+    isRemovable(y) {
+        const parent = this.base.parentNode;
+        const bounds = parent.getBoundingClientRect();
+        const buffer = GradientSwatch.DELETE_BUFFER;
+        return (this.isColor && y > bounds.bottom + buffer)
+            || (!this.isColor && y < bounds.top - buffer);
     }
 
     /**
@@ -595,6 +616,7 @@ class GradientSwatch extends Component {
         this.base.style.left = `${value*100}%`;
         const {onUpdate, index, type} = this.props;
         onUpdate(index, type, value);
+        this.base.style.opacity = this.isRemovable(event.clientY) ? 0.5 : 1;
     }
 
     /**
