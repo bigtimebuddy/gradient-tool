@@ -549,7 +549,7 @@ class App extends Component {
                             this.copy(this.stepsOutput.innerHTML);
                         }
                     }, [h(Icon, { type: 'clipboard' }),'Copy']),
-                    h('h2', { class: 'mb-2' }, [ h(Icon, {type: 'code'}), 'Steps' ]),
+                    h('h2', { class: 'mb-2' }, [ h(Icon, {type: 'ellipsis-v'}), 'Steps' ]),
                     h('textarea', {
                         class: 'form-control code-output',
                         ref: this.refSteps.bind(this)

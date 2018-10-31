@@ -38,7 +38,7 @@ body {
 }
 .output {
     font-size: 14px;
-    min-height: 160px;
+    min-height: 100px;
 }
 h2 {
     font-weight:bold;
@@ -47,7 +47,7 @@ h2 {
 
 .code-output {
     white-space: pre !important;
-    min-height: 160px;
+    min-height: 100px;
     font-size: 12px;
     font-family:Menlo,Monaco,Consolas,"Courier New",monospace;
 }
