@@ -25,34 +25,22 @@ class App extends Component {
         this.canvas = null;
 
         /**
-         * Render context
-         * @member {Context2dRenderingContext}
-         */
-        this.ctx = null;
-
-        /**
-         * Code container output
-         * @member {HTMLElement}
-         */
-        this.codeOutput = null;
-
-        /**
-         * Textarea output
-         * @member {HTMLElement}
-         */
-        this.imageOutput = null;
-
-        /**
-         * Textarea output
-         * @member {HTMLElement}
-         */
-        this.stepsOutput = null;
-
-        /**
          * Image preview
          * @member {HTMLImageElement}
          */
         this.preview = null;
+
+        /**
+         * Output string
+         * @member {string}
+         */
+        this.stepsRef = null;
+
+        /**
+         * Output string
+         * @member {string}
+         */
+        this.imageRef = null;
 
         const gradient = localStorage.getItem(App.SAVE_KEY);
         if (gradient) {
@@ -103,29 +91,23 @@ class App extends Component {
         if (!canvas) {
             return;
         }
+        const {width, height} = this.state;
         this.canvas = canvas;
-        canvas.width = this.state.width;
-        canvas.height = this.state.height;
-        this.ctx = canvas.getContext('2d');
-    }
-
-    refPreview(preview) {
-        this.preview = preview;
-    }
-
-    refCode(codeOutput) {
-        this.codeOutput = codeOutput;
-    }
-
-    refSteps(stepsOutput) {
-        this.stepsOutput = stepsOutput;
+        canvas.width = width;
+        canvas.height = height;
     }
 
     /**
-     * Handle the ref output
-     */
-    refImage(imageOutput) {
-        this.imageOutput = imageOutput;
+     * Handle gradient canvas ref, get context
+     */  
+    refPreview(preview) {
+        if (!preview) {
+            return;
+        }
+        const {width, height, horizontal} = this.state;
+        this.preview = preview;
+        preview.width = horizontal !== false ? width : height;
+        preview.height = horizontal !== false ? height : width;
     }
 
     /**
@@ -144,55 +126,59 @@ class App extends Component {
     }
 
     /**
-     * Re-render the gradient
+     * Redraw Canvas, this does the magic to compose the alpha and color channels.
+     * @param {HTMLCanvasElement} canvas
+     * @param {Object[]} color
+     * @param {Object[]} alpha
+     * @param {boolean} horizontal
+     * @return {Canvas2dRenderingContext}
      */
-    redraw() {
-        if (!this.ctx) {
-            return;
-        }
-        const {width, height, color, alpha, horizontal} = this.state;
+    redrawCanvas(canvas, color, alpha, horizontal) {
+        const {width, height} = canvas;
+        const ctx = canvas.getContext('2d');
         let colorChannel, alphaChannel;
         if (horizontal !== false) {
-            colorChannel = this.ctx.createLinearGradient(0, 0, width, 0);
-            alphaChannel = this.ctx.createLinearGradient(0, 0, width, 0);
+            colorChannel = ctx.createLinearGradient(1, 0, width - 2, 0);
+            alphaChannel = ctx.createLinearGradient(1, 0, width - 2, 0);
         }
         else {
-            colorChannel = this.ctx.createLinearGradient(0, 0, 0, height);
-            alphaChannel = this.ctx.createLinearGradient(0, 0, 0, height);
+            colorChannel = ctx.createLinearGradient(0, 1, 0, height - 2);
+            alphaChannel = ctx.createLinearGradient(0, 1, 0, height - 2);
         }
-
-        this.ctx.clearRect(0, 0, width, height);
-        this.ctx.globalCompositeOperation = 'source-out';
+        ctx.clearRect(0, 0, width, height);
+        ctx.globalCompositeOperation = 'source-out';
 
         alpha.forEach(({stop, value}) => {
             alphaChannel.addColorStop(stop, `rgba(100%,100%,100%,${(1 - value)*100}%)`);
         });
-        this.ctx.fillStyle = alphaChannel;
-        this.ctx.fillRect(0, 0, width, height);
+        ctx.fillStyle = alphaChannel;
+        ctx.fillRect(0, 0, width, height);
 
         color.forEach(({stop, value}) => {
             colorChannel.addColorStop(stop, value);
         });
-        this.ctx.fillStyle = colorChannel;
-        this.ctx.fillRect(0, 0, width, height);
+        ctx.fillStyle = colorChannel;
+        ctx.fillRect(0, 0, width, height);
+        return ctx;
+    }
 
+
+    /**
+     * Re-render the gradient
+     */
+    redraw() {
+        if (!this.canvas) {
+            return;
+        }
+
+        const {width, height, horizontal, color, alpha} = this.state;
+        const ctx = this.redrawCanvas(this.canvas, color, alpha, horizontal);
         const src = this.canvas.toDataURL('image/png');
-        // this.preview.src = src;
-
-        this.preview.width = width;
-        this.preview.height = height;
-
-        const context = this.preview.getContext('2d');
-        context.drawImage(this.canvas, 0, 0);
-
-        let imageData;
-        if (horizontal !== false) {
-            imageData = this.ctx.getImageData(0, 0, width, 1);
-        }
-        else {
-            imageData = this.ctx.getImageData(0, 0, 1, height);
-        }
         
+        const imageData = horizontal !== false ?
+            ctx.getImageData(0, 0, width, 1):
+            ctx.getImageData(0, 0, 1, height);
+
         // Calculate the steps at hex numbers
         const steps = [];
         for (let i = 0; i < imageData.data.length / 4; i++) {
@@ -203,11 +189,16 @@ class App extends Component {
             steps.push('0x' + this.num2hex(r) + this.num2hex(g) + this.num2hex(b) + this.num2hex(a));
         }
 
-        this.stepsOutput.innerHTML = `[\n  ${steps.join(',\n  ')} \n]`;
-        this.imageOutput.innerHTML = src;
-        this.codeOutput.innerHTML = this.toDataString();
+        this.redrawCanvas(this.preview, color, alpha, true);
+        this.imageRef.setState({ value: src });
+        this.stepsRef.setState({ value: `[\n  ${steps.join(',\n  ')} \n]` });
     }
 
+    /**
+     * Convert a uint (255) to hex (ff)
+     * @param {number} num - 0 to 255 
+     * @return {string} Hex string
+     */
     num2hex(num) {
         var s = num.toString(16);
         return s.length == 1 ? '0' + s : s;
@@ -221,33 +212,6 @@ class App extends Component {
         delete clone.active;
         delete clone.horizontal;
         return JSON.stringify(clone, null, '   ');
-    }
-
-    /**
-     * Convert color to RGB string
-     * @param {string} hex - e.g. #ff00ff
-     * @param {number} alpha
-     * @return {string} e.g. rgba(255, 0, 255, 0.5)
-     */
-    hex2rgba(hex, alpha) {
-        hex = parseInt(hex.replace('#', ''), 16);
-        const r = ((hex >> 16) & 0xFF);
-        const g = ((hex >> 8) & 0xFF);
-        const b = (hex & 0xFF);
-        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    }
-
-    /**
-     * Copy to clipboard
-     * @param {string} text - Text to copy
-     */
-    copy(text) {
-        const temp = document.createElement('textarea');
-        document.body.appendChild(temp);
-        temp.innerHTML = text;
-        temp.select();
-        document.execCommand('copy');
-        document.body.removeChild(temp);
     }
 
     /**
@@ -291,8 +255,8 @@ class App extends Component {
      * @param {number} i 
      * @param {Event} e 
      */
-    onStop(i, type, e) {
-        this.state[type][i].stop = parseFloat(e.currentTarget.value);
+    onStop(i, type, value) {
+        this.state[type][i].stop = value;
         this.forceUpdate();
     }
 
@@ -308,10 +272,11 @@ class App extends Component {
     /**
      * Add a new color or alpha
      */
-    onAdd(type) {
+    onAdd(type, event) {
+        event.stopPropagation();
         this.state[type].push({
             value: type === 'color' ? "#ffffff" : 1,
-            stop: 1
+            stop: event.layerX / event.currentTarget.clientWidth
         });
         this.forceUpdate();
     }
@@ -339,6 +304,7 @@ class App extends Component {
      */
     onReset() {
         if (confirm('Do you want to reset to default?')) {
+            localStorage.removeItem(App.SAVE_KEY);
             this.setState(this.defaultState);
         }
     }
@@ -364,7 +330,7 @@ class App extends Component {
     render(props, { width, height, color, alpha, active, horizontal }) {
         return h('main', { class: 'container' },
             h('div', { class: 'row py-4' }, [
-                h('div', { class: 'col-sm-8'}, [
+                h('div', { class: 'col-sm-8 offset-sm-2'}, [
                     h('h2', { class: 'mb-2' },  [ h(Icon, {type: 'cog'}), 'Gradient']),
                     h('div', { class: 'd-flex mb-2' }, [
                         h('div', { class: 'input-group d-flex mr-1' }, [
@@ -398,15 +364,26 @@ class App extends Component {
                     ]),
                     h('div', { class: 'canvas-container checked bg-white rounded mb-2' }, [
                         h('div', { class: 'canvas-controls'}, [
-                            // h('button', {
-                            //     class: `btn btn-sm btn-outline-secondary ${horizontal !== false ? 'active' : ''}`,
-                            //     onClick: this.onHorizontal.bind(this, true)
-                            // }, h(Icon, {type: 'arrows-h', solo: true })),
-                            // h('button', {
-                            //     class: `btn btn-sm btn-outline-secondary ${horizontal === false ? 'active' : '' }`,
-                            //     onClick: this.onHorizontal.bind(this, false)
-                            // }, h(Icon, {type: 'arrows-v', solo: true })),
-                            h('button', { class: 'btn btn-sm btn-outline-secondary', onClick: this.onReset.bind(this) }, h(Icon, {type: 'refresh', solo: true }))
+                            h('button', {
+                                class: `btn btn-sm btn-outline-secondary ${horizontal !== false ? 'active' : ''}`,
+                                onClick: this.onHorizontal.bind(this, true)
+                            }, h(Icon, {type: 'arrows-h', solo: true })),
+                            h('button', {
+                                class: `btn btn-sm btn-outline-secondary ${horizontal === false ? 'active' : '' }`,
+                                onClick: this.onHorizontal.bind(this, false)
+                            }, h(Icon, {type: 'arrows-v', solo: true })),
+                            h('button', {
+                                    class: 'btn btn-sm btn-outline-secondary',
+                                    onClick: this.onReverse.bind(this)
+                                },
+                                h(Icon, { type: 'exchange', solo: true })
+                            ),
+                            h('button', {
+                                    class: 'btn btn-sm btn-outline-secondary',
+                                    onClick: this.onReset.bind(this)
+                                },
+                                h(Icon, {type: 'undo', solo: true })
+                            )
                         ]),
                         h('canvas',{ ref: this.refCanvas.bind(this) })
                     ]),
@@ -415,28 +392,32 @@ class App extends Component {
                             ref: this.refPreview.bind(this),
                             class: 'gradient-bar-image checked border border-secondary rounded'
                         }),
-                        h('div', null, color.map((item, i) =>
-                            h('div', {
-                                    onClick: () => {
-                                        this.onSelect(i, 'color');
-                                    },
-                                    class: 'swatch swatch-color rounded',
-                                    style: `left:${item.stop*100}%`
-                                },
-                                h('span', { class: 'swatch-badge', style: `background:${item.value}`})
-                            )
-                        )),
-                        h('div', null, alpha.map((item, i) =>
-                            h('div', {
-                                    onClick: () => {
-                                        this.onSelect(i, 'alpha');
-                                    },
-                                    class: 'swatch swatch-alpha rounded',
-                                    style: `left:${item.stop*100}%`
-                                },
-                                h('span', { class: 'swatch-badge' })
-                            )
-                        ))
+                        h('div', {
+                            class: 'swatch-container color',
+                            onMouseDown: this.onAdd.bind(this, 'color') },
+                            color.map((item, index) => h(GradientSwatch, {
+                                value: item.value,
+                                stop: item.stop,
+                                type: 'color',
+                                index,
+                                onSelect: this.onSelect.bind(this),
+                                onUpdate: this.onStop.bind(this),
+                                onRemove: this.onRemove.bind(this)
+                            }))
+                        ),
+                        h('div', {
+                            class: 'swatch-container alpha',
+                            onMouseDown: this.onAdd.bind(this, 'alpha') },
+                            alpha.map((item, index) => h(GradientSwatch, {
+                                value: item.value,
+                                stop: item.stop,
+                                type: 'alpha',
+                                index,
+                                onSelect: this.onSelect.bind(this),
+                                onUpdate: this.onStop.bind(this),
+                                onRemove: this.onRemove.bind(this)
+                            }))
+                        )
                     ]),
                     (active && h('div', { class: 'border rounded p-2 my-2 bg-white mx-auto w-50'}, [
                         h('button', {
@@ -445,30 +426,22 @@ class App extends Component {
                         }, h('small', null, h(Icon, {type: 'close'}))),
                         (active.type === 'color' && h('div', null, [
                             h('div', { class: 'input-group d-flex mb-2' }, [
+                                h('div', { class: 'input-group-prepend' }, [
+                                    h('span', { class: 'input-group-text sm' }, 'Color')
+                                ]),
                                 h('input', {
                                     type: 'color',
                                     class: 'form-control colorpicker',
                                     value: color[active.index].value,
                                     onInput: this.onValue.bind(this, active.index, active.type)
                                 })
-                            ]),
-                            h('div', { class: 'input-group d-flex mb-2' }, [
-                                h('input', {
-                                    type: 'range',
-                                    step: 0.01,
-                                    min: 0,
-                                    max: 1,
-                                    class: 'custom-range range bg-white rounded-right border px-2',
-                                    value: color[active.index].stop,
-                                    onInput: this.onStop.bind(this, active.index, active.type)
-                                }),
-                                h('div', { class: 'input-group-append' }, [
-                                    h('span', { class: 'input-group-text sm' }, color[active.index].stop.toPrecision(2))
-                                ])
                             ])
                         ])),
                         (active.type === 'alpha' && h('div', null, [
                             h('div', { class: 'input-group d-flex mb-2' }, [
+                                h('div', { class: 'input-group-prepend' }, [
+                                    h('span', { class: 'input-group-text sm' }, 'Alpha')
+                                ]),
                                 h('input', {
                                     type: 'range',
                                     step: 0.01,
@@ -481,82 +454,178 @@ class App extends Component {
                                 h('div', { class: 'input-group-append' }, [
                                     h('span', { class: 'input-group-text sm' }, alpha[active.index].value.toPrecision(2))
                                 ])
-                            ]),
-                            h('div', { class: 'input-group d-flex mb-2' }, [
-                                h('input', {
-                                    type: 'range',
-                                    step: 0.01,
-                                    min: 0,
-                                    max: 1,
-                                    class: 'custom-range range bg-white rounded-right border px-2',
-                                    value: alpha[active.index].stop,
-                                    onInput: this.onStop.bind(this, active.index, active.type)
-                                }),
-                                h('div', { class: 'input-group-append' }, [
-                                    h('span', { class: 'input-group-text sm' }, alpha[active.index].stop.toPrecision(2))
-                                ])
                             ])
-                        ])),
-                        h('div', { class: 'text-center'},
-                            h('button', {
-                                class: 'btn btn-outline-danger btn-block btn-sm',
-                                onClick: this.onRemove.bind(this, active.index, active.type)
-                            }, [h(Icon, {type: 'trash'}), 'Remove'])
-                        )
-                    ])),
-                    h('div', { class: 'text-center mb-4' }, [
-                        h('button', {
-                            class: 'btn btn-primary mr-2',
-                            onClick: this.onAdd.bind(this, 'color')
-                        }, [h(Icon, { type: 'plus' }), 'Add Color']),
-                        h('button', {
-                            class: 'btn btn-primary mr-2',
-                            onClick: this.onAdd.bind(this, 'alpha')
-                        }, [h(Icon, { type: 'plus' }), 'Add Alpha']),
-                        h('button', {
-                            class: 'btn btn-primary',
-                            onClick: this.onReverse.bind(this)
-                        }, [h(Icon, { type: 'sort' }), 'Reverse'])
-                    ]),
-                ]),
-                h('div', { class: 'col-sm-4'}, [
-                    h('button', {
-                        class: 'btn btn-sm btn-secondary float-right',
-                        onClick: () => {
-                            this.copy(this.imageOutput.innerHTML);
-                        }
-                    }, [h(Icon, {type: 'clipboard' }),'Copy']),
-                    h('h2', { class: 'mb-2' }, [ h(Icon, {type: 'image'}), 'Image']),
-                    h('textarea', {
-                        spellcheck: false,
-                        class: 'form-control output mb-4',
-                        ref: this.refImage.bind(this)
-                    }),
-                    h('button', {
-                        class: 'btn btn-sm btn-secondary float-right',
-                        onClick: () => {
-                            this.copy(this.codeOutput.innerHTML);
-                        }
-                    }, [h(Icon, { type: 'clipboard' }),'Copy']),
-                    h('h2', { class: 'mb-2' }, [ h(Icon, {type: 'code'}), 'Code' ]),
-                    h('textarea', {
-                        class: 'form-control code-output mb-4',
-                        ref: this.refCode.bind(this)
-                    }),
-                    h('button', {
-                        class: 'btn btn-sm btn-secondary float-right',
-                        onClick: () => {
-                            this.copy(this.stepsOutput.innerHTML);
-                        }
-                    }, [h(Icon, { type: 'clipboard' }),'Copy']),
-                    h('h2', { class: 'mb-2' }, [ h(Icon, {type: 'ellipsis-v'}), 'Steps' ]),
-                    h('textarea', {
-                        class: 'form-control code-output',
-                        ref: this.refSteps.bind(this)
-                    }),
+                        ]))
+                    ]))
                 ])
+            ]),
+            h('div', { class: 'row'}, [
+                h('div', { class: 'col-sm-4 offset-sm-2' },
+                    h(Output, {
+                        icon: 'image',
+                        title: 'Image',
+                        ref: (ref) => {
+                            this.imageRef = ref;
+                        }
+                    })
+                ),
+                h('div', { class: 'col-sm-4' },
+                    h(Output, {
+                        icon: 'code',
+                        title: 'Steps',
+                        ref: (ref) => {
+                            this.stepsRef = ref;
+                        }
+                    })
+                )
             ])
         );
+    }
+}
+
+/**
+ * Output textarea with a copy button
+ * @class
+ */
+class Output extends Component {
+    constructor(props) {
+        super(props);
+        this.state = { value: '' };
+    }
+
+    /**
+     * Copy to clipboard
+     * @param {string} text - Text to copy
+     */
+    copy() {
+        const temp = document.createElement('textarea');
+        document.body.appendChild(temp);
+        temp.innerHTML = this.state.value;
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+    }
+
+    render({ icon, title }, { value }) {
+        return h('div', null, [
+            h('button', {
+                class: 'btn btn-sm btn-secondary float-right',
+                onClick: this.copy.bind(this)
+            }, h(Icon, { type: 'clipboard', solo: true })),
+            h('h2', { class: 'mb-2' }, [ h(Icon, {type: icon }), title ]),
+            h('textarea', { class: 'form-control code-output'}, value)
+        ]);
+    }
+}
+
+/**
+ * Either a gradient color or alpha swatc
+ * @class
+ */
+class GradientSwatch extends Component {
+    constructor(props) {
+        super(props);
+        this.startX = 0;
+        this.startTime = 0;
+        this.startLeft = 0;
+        this.onMove = this.onMove.bind(this);
+        this.onRelease = this.onRelease.bind(this);
+        this.onDown = this.onDown.bind(this);
+    }
+
+    componentWillUnmount() {
+        this.stopDrag();
+    }
+
+    stopDrag() {
+        window.removeEventListener('mousemove', this.onMove);
+        window.removeEventListener('mouseup', this.onRelease);
+    }
+
+    /**
+     * When the mouse is pressed
+     * @param {MouseEvent} event
+     */
+    onDown(event) {
+        event.stopPropagation();
+        this.startTime = performance.now();
+        this.startX = event.clientX;
+        this.startLeft = this.base.offsetLeft;
+        this.stopDrag();
+        window.addEventListener('mousemove', this.onMove);
+        window.addEventListener('mouseup', this.onRelease);
+    }
+
+    /**
+     * When the mouse is released
+     * @param {MouseEvent} event
+     */
+    onRelease(event) {
+        event.stopPropagation();
+        this.stopDrag();
+        // Check for clicks
+        if (performance.now() - this.startTime < GradientSwatch.CLICK_TIME) {
+            const {onSelect, index, type} = this.props;
+            onSelect(index, type);
+        }
+        else {
+            const parent = this.base.parentNode;
+            const bounds = parent.getBoundingClientRect();
+            const buffer = GradientSwatch.DELETE_BUFFER;
+            if ((this.isColor && event.clientY > bounds.bottom + buffer)
+                || (!this.isColor && event.clientY < bounds.top - buffer)) {
+                const {onRemove, index, type} = this.props;
+                onRemove(index, type);
+            }
+        }
+    }
+
+    /**
+     * Drag
+     */
+    onMove(event) {
+        const totalWidth = this.base.parentNode.clientWidth;
+        const deltaX = event.clientX - this.startX;
+        const value = Math.min(1, Math.max(0, (this.startLeft + deltaX) / totalWidth));
+        this.base.style.left = `${value*100}%`;
+        const {onUpdate, index, type} = this.props;
+        onUpdate(index, type, value);
+    }
+
+    /**
+     * @member {boolean}
+     * @readonly
+     */
+    get isColor() {
+        return this.props.type === 'color';
+    }
+
+    render({ stop, value, type }) {
+        const style = this.isColor ? `background:${value}` : `opacity:${value}`;
+        return h('div', {
+                onMouseDown: this.onDown,
+                onMouseUp: this.onRelease,
+                class: `swatch swatch-${type} rounded`,
+                style: `left:${stop*100}%`
+            },
+            h('span', { class: 'swatch-badge', style })
+        );
+    }
+
+    /**
+     * The min time consider to be click
+     * @static
+     */
+    static get CLICK_TIME() {
+        return 200;
+    }
+
+    /**
+     * The number of pixels to be considered a delete
+     * @static
+     */
+    static get DELETE_BUFFER() {
+        return 10;
     }
 }
 
