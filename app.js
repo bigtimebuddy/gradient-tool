@@ -345,7 +345,6 @@ class App extends Component {
      * Render
      */
     render(props, { width, height, color, alpha, active, horizontal }) {
-        console.log(active);
         return h('main', { class: 'container' },
             h('div', { class: 'row py-4' }, [
                 h('div', { class: 'col-sm-8 offset-sm-2'}, [
