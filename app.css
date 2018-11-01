@@ -72,6 +72,9 @@ h2 {
 input.range {
     width: calc(100% - 120px);
 }
+.badge-sm {
+    font-size:60%;
+}
 
 .gradient-bar {
     height:80px;

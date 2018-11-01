@@ -56,6 +56,10 @@ class App extends Component {
         else {
             this.state = this.defaultState;
         }
+
+        if (this.state.format === undefined) {
+            this.state.format = App.FORMATS.UINT;
+        }
     }
 
     /**
@@ -64,6 +68,7 @@ class App extends Component {
      */
     get defaultState() {
         return {
+            format: App.FORMATS.UINT,
             active: null,
             width: App.DEFAULT_SIZE,
             height: App.DEFAULT_SIZE,
@@ -178,9 +183,9 @@ class App extends Component {
             return;
         }
 
-        const {width, height, horizontal, color, alpha} = this.state;
+        const {width, height, horizontal, color, alpha, format} = this.state;
         const ctx = this.redrawCanvas(this.canvas, color, alpha, horizontal);
-        const src = this.canvas.toDataURL('image/png');
+        const src = this.canvas.toDataURL();
         
         const imageData = horizontal !== false ?
             ctx.getImageData(0, 0, width, 1):
@@ -193,7 +198,18 @@ class App extends Component {
             const g = imageData.data[(i*4)+1];
             const b = imageData.data[(i*4)+2];
             const a = imageData.data[(i*4)+3];
-            steps.push('0x' + this.num2hex(r) + this.num2hex(g) + this.num2hex(b) + this.num2hex(a));
+            if (format === App.FORMATS.UINT) {
+                steps.push('0x' + this.num2hex(r) + this.num2hex(g) + this.num2hex(b) + this.num2hex(a));
+            }
+            else if (format === App.FORMATS.HEX) {
+                steps.push(`'#${this.num2hex(r) + this.num2hex(g) + this.num2hex(b) + this.num2hex(a)}'`);
+            }
+            else if (format === App.FORMATS.ARRAY) {
+                steps.push(`[${r},${g},${b},${a}]`);
+            }
+            else if (format === App.FORMATS.CSS) {
+                steps.push(`'rgba(${r},${g},${b},${a})'`);
+            }
         }
 
         this.redrawCanvas(this.preview, color, alpha, true);
@@ -317,6 +333,14 @@ class App extends Component {
     }
 
     /**
+     * Update the format for the code output
+     * @param {App.FORMATS} format
+     */
+    onFormat(format) {
+        this.setState({ format });
+    }
+
+    /**
      * Set the active element
      */
     onSelect(index, type) {
@@ -344,7 +368,7 @@ class App extends Component {
     /**
      * Render
      */
-    render(props, { width, height, color, alpha, active, horizontal }) {
+    render(props, { width, height, color, alpha, active, horizontal, format }) {
         return h('main', { class: 'container' },
             h('div', { class: 'row py-4' }, [
                 h('div', { class: 'col-sm-8 offset-sm-2'}, [
@@ -484,12 +508,55 @@ class App extends Component {
                     h(Output, {
                         icon: 'code',
                         title: 'Steps',
+                        badge: horizontal !== false ? width : height,
                         ref: (ref) => {
                             this.stepsRef = ref;
                         }
-                    })
+                    }, [
+                        h('div', { class: 'text-center pt-2' },
+                            h('div', { class: 'btn-group'}, [
+                                h(FormatButton, {
+                                    onClick: this.onFormat.bind(this, App.FORMATS.UINT),
+                                    active: format === App.FORMATS.UINT
+                                }, 'Uint'),
+                                h(FormatButton, {
+                                    onClick: this.onFormat.bind(this, App.FORMATS.HEX),
+                                    active: format === App.FORMATS.HEX
+                                }, 'Hex'),
+                                h(FormatButton, {
+                                    onClick: this.onFormat.bind(this, App.FORMATS.ARRAY),
+                                    active: format === App.FORMATS.ARRAY
+                                }, 'Array'),
+                                h(FormatButton, {
+                                    onClick: this.onFormat.bind(this, App.FORMATS.CSS),
+                                    active: format === App.FORMATS.CSS
+                                }, 'CSS')
+                            ])
+                        )
+                    ])
                 )
             ])
+        );
+    }
+}
+
+/**
+ * Code formats
+ *
+ */
+App.FORMATS = {
+    UINT: 0,
+    HEX: 1,
+    ARRAY: 2,
+    CSS: 3
+};
+
+class FormatButton extends Component {
+    render({ active, onClick, children }) {
+        return h('button', {
+            onClick,
+            class: `btn btn-sm btn${active ? '' : '-outline'}-secondary px-2 py-0`},
+            h('small', null, children)
         );
     }
 }
@@ -517,13 +584,17 @@ class Output extends Component {
         document.body.removeChild(temp);
     }
 
-    render({ icon, title }, { value }) {
+    render({ icon, title, badge, children }, { value }) {
         return h('div', null, [
             h('button', {
                 class: 'btn btn-sm btn-secondary float-right',
                 onClick: this.copy.bind(this)
             }, h(Icon, { type: 'clipboard', solo: true })),
-            h('h2', { class: 'mb-2' }, [ h(Icon, {type: icon }), title ]),
+            h('h2', { class: 'mb-2' }, [
+                h(Icon, {type: icon }),
+                title,
+                (badge && h('span', { class: 'badge badge-pill badge-sm badge-secondary ml-2' }, badge))
+            ]),
             h('textarea', {
                 class: 'form-control code-output',
                 spellcheck: false,
@@ -532,7 +603,7 @@ class Output extends Component {
                     event.target.select();
                 }
             }, value)
-        ]);
+        ].concat(children));
     }
 }
 
