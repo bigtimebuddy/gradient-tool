@@ -295,7 +295,8 @@ class App extends Component {
             value: type === 'color' ? "#ffffff" : 1,
             stop: event.layerX / event.currentTarget.clientWidth
         });
-        this.forceUpdate();
+        const index = this.state[type].length - 1;
+        this.setState({ active: { type, index }});
     }
 
     /**
@@ -338,13 +339,7 @@ class App extends Component {
      * Set the active element
      */
     onSelect(index, type) {
-        const {active} = this.state;
-        if (active && active.index === index && active.type === type) {
-            this.onDeselect();
-        }
-        else {
-            this.setState({ active: { index, type } });
-        }
+        this.setState({ active: { index, type } });
     }
 
     /**
@@ -455,6 +450,7 @@ class App extends Component {
                             onClick: this.onDeselect.bind(this)
                         }, h('small', null, h(Icon, {type: 'close'}))),
                         h(ColorPicker, {
+                            id: active.type + active.index,
                             color: color[active.index].value,
                             onUpdate: this.onValue.bind(this)
                         })
@@ -617,6 +613,11 @@ class ColorPicker extends Component {
          */
         this.initColor = props.color;
 
+        /**
+         * ID of the original
+         */
+        this.id = props.id;
+
         // Reset the state
         this.reset(props.color, false);
 
@@ -625,6 +626,16 @@ class ColorPicker extends Component {
         this.updateSaturation = this.updateSaturation.bind(this);
         this.stopHue = this.stopHue.bind(this);
         this.updateHue = this.updateHue.bind(this);
+    }
+
+    componentDidUpdate() {
+        const {id, color} = this.props;
+        if (id !== this.id) {
+            this.initColor = color;
+            this.id = id;
+            this.reset(color, false);
+            this.forceUpdate();
+        }
     }
 
     /**
@@ -785,16 +796,20 @@ class ColorPicker extends Component {
     reset(hex, update) {
         const [ hue, saturation, value ] = this.hexToHsv(hex);
         const hueHex = this.hsvToHex(hue, 1, 1);
-        if (update !== false) {
-            this.update(hex);
-        }
-        this.setState({
+        const state = {
             hex,
             hue,
             hueHex,
             saturation,
             value
-        });
+        };
+        if (update !== false) {
+            this.update(hex);
+            this.state = state;
+        }
+        else {
+            this.setState(state);
+        }
     }
 
     /**
@@ -891,6 +906,12 @@ class GradientSwatch extends Component {
         this.stopDrag();
         window.addEventListener('mousemove', this.onMove);
         window.addEventListener('mouseup', this.onRelease);
+        this.select();
+    }
+
+    select() {
+        const {onSelect, index, type} = this.props;
+        onSelect(index, type);
     }
 
     /**
@@ -902,8 +923,7 @@ class GradientSwatch extends Component {
         this.stopDrag();
         // Check for clicks
         if (performance.now() - this.startTime < GradientSwatch.CLICK_TIME) {
-            const {onSelect, index, type} = this.props;
-            onSelect(index, type);
+            this.select();
         }
         else if (this.isRemovable(event.clientY)) {
             const {onRemove, index, type} = this.props;
