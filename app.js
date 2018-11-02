@@ -161,7 +161,7 @@ class App extends Component {
         ctx.globalCompositeOperation = 'source-out';
 
         alpha.forEach(({stop, value}) => {
-            alphaChannel.addColorStop(stop, `rgba(100%,100%,100%,${(1 - value)*100}%)`);
+            alphaChannel.addColorStop(stop, `rgba(255,255,255,${(1 - value)})`);
         });
         ctx.fillStyle = alphaChannel;
         ctx.fillRect(0, 0, width, height);
@@ -495,7 +495,7 @@ class App extends Component {
                 ])
             ]),
             h('div', { class: 'row'}, [
-                h('div', { class: 'col-sm-4 offset-sm-2' },
+                h('div', { class: 'col-sm-4 offset-sm-2 mb-4' },
                     h(Output, {
                         icon: 'image',
                         title: 'Image',
@@ -504,7 +504,7 @@ class App extends Component {
                         }
                     })
                 ),
-                h('div', { class: 'col-sm-4' },
+                h('div', { class: 'col-sm-4 mb-4' },
                     h(Output, {
                         icon: 'code',
                         title: 'Steps',

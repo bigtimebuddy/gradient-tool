@@ -3,6 +3,7 @@ body {
     padding:0;
     font-family:"Neflix Sans", "NetflixSans", Arial, sans-serif;
     background:#e5e8ea;
+    -webkit-user-select:none;
     user-select: none;
 }
 .canvas-container {
