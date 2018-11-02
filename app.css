@@ -195,12 +195,12 @@ input.range {
     border:1px solid #ced4da;
 }
 .colorpicker-previous {
-    top:0;
-    border-bottom:0;
+    top:40px;
+    border-top:0;
 }
 .colorpicker-current {
-    top: 40px;
-    border-top:0;
+    top:0;
+    border-bottom:0;
 }
 
 .colorpicker-saturation-guide,
