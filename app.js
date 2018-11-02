@@ -785,6 +785,7 @@ class ColorPicker extends Component {
      * Internally update the
      */
     update(hex) {
+        // Limit the spamming of updates when we are dragging
         if (this.state.hex !== hex) {
             this.props.onUpdate(hex);
         }
@@ -805,10 +806,10 @@ class ColorPicker extends Component {
         };
         if (update !== false) {
             this.update(hex);
-            this.state = state;
+            this.setState(state);
         }
         else {
-            this.setState(state);
+            this.state = state;
         }
     }
 
