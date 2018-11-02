@@ -42,12 +42,6 @@ class App extends Component {
          */
         this.imageRef = null;
 
-        /**
-         * Output string
-         * @member {string}
-         */
-        this.colorpickerRef = null;
-
         const gradient = localStorage.getItem(App.SAVE_KEY);
         if (gradient) {
             this.state = JSON.parse(gradient);
@@ -254,12 +248,12 @@ class App extends Component {
     }
 
     /**
-     * Handle changes to color values
+     * Handle changes to color values and alpha values for active.
      * @param {number} i 
      * @param {Event} e 
      */
-    onValue(i, type, e) {
-        let {value} = e.currentTarget;
+    onValue(value) {
+        const {index, type} = this.state.active;
         // Ignore invalid colors
         if (type === 'color') {
             if (!/^#[a-f0-9]{6}$/i.test(value)) {
@@ -269,7 +263,7 @@ class App extends Component {
         else if (type === 'alpha') {
             value = parseFloat(value);
         }
-        this.state[type][i].value = value;
+        this.state[type][index].value = value;
         this.forceUpdate();
     }
 
@@ -349,11 +343,6 @@ class App extends Component {
             this.onDeselect();
         }
         else {
-            // If we select the color picker
-            if (type === 'color') {
-                this.colorpickerRef.value = this.state[type][index].value;
-                this.colorpickerRef.click();
-            }
             this.setState({ active: { index, type } });
         }
     }
@@ -428,7 +417,7 @@ class App extends Component {
                         ]),
                         h('canvas',{ ref: this.refCanvas.bind(this) })
                     ]),
-                    h('div', { class: 'gradient-bar' }, [
+                    h('div', { class: 'gradient-bar mb-2' }, [
                         h('canvas', {
                             ref: this.refPreview.bind(this),
                             class: 'gradient-bar-image checked rounded'
@@ -460,37 +449,39 @@ class App extends Component {
                             }))
                         )
                     ]),
-                    h('input', {
-                        ref: (input) => {
-                            this.colorpickerRef = input;
-                        },
-                        type: 'color',
-                        class: 'colorpicker invisible',
-                        value: active && active.type === 'color' ? color[active.index].value : '#ffffff',
-                        onInput: active && active.type === 'color' ? this.onValue.bind(this, active.index, active.type) : null
-                    }),
-                    (active && active.type === 'alpha' && h('div', { class: 'border rounded p-2 bg-white mx-auto w-50'}, [
+                    (active && active.type === 'color' && h('div', { class: 'control-color border rounded p-2 bg-white mx-auto' }, [
                         h('button', {
                             class: 'btn btn-sm small close mb-2',
                             onClick: this.onDeselect.bind(this)
                         }, h('small', null, h(Icon, {type: 'close'}))),
-                        h('div', { class: 'input-group d-flex mb-2' }, [
-                            h('div', { class: 'input-group-prepend' }, [
-                                h('span', { class: 'input-group-text sm' }, 'Alpha')
-                            ]),
-                            h('input', {
-                                type: 'range',
-                                step: 0.01,
-                                min: 0,
-                                max: 1,
-                                class: 'custom-range range bg-white rounded-right border px-2',
-                                value: alpha[active.index].value,
-                                onInput: this.onValue.bind(this, active.index, active.type)
-                            }),
-                            h('div', { class: 'input-group-append' }, [
-                                h('span', { class: 'input-group-text sm' }, alpha[active.index].value.toPrecision(2))
+                        h(ColorPicker, {
+                            color: color[active.index].value,
+                            onUpdate: this.onValue.bind(this)
+                        })
+                    ])),
+                    (active && active.type === 'alpha' && h('div', { class: 'control-alpha border rounded p-2 bg-white'}, [
+                        h('button', {
+                            class: 'btn btn-sm small close mb-2',
+                            onClick: this.onDeselect.bind(this)
+                        }, h('small', null, h(Icon, {type: 'close'}))),
+                        h('div', { class: ' mx-auto w-50' },
+                            h('div', { class: 'input-group d-flex' }, [
+                                h('input', {
+                                    type: 'range',
+                                    step: 0.01,
+                                    min: 0,
+                                    max: 1,
+                                    class: 'custom-range range bg-white rounded-right border px-2',
+                                    value: alpha[active.index].value,
+                                    onInput: (event) => {
+                                        this.onValue(event.target.value);
+                                    }
+                                }),
+                                h('div', { class: 'input-group-append' }, [
+                                    h('span', { class: 'input-group-text sm' }, alpha[active.index].value.toPrecision(2))
+                                ])
                             ])
-                        ])
+                        )
                     ]))
                 ])
             ]),
@@ -606,6 +597,263 @@ class Output extends Component {
         ].concat(children));
     }
 }
+
+/**
+ * Component for selecting color
+ * @class
+ */
+class ColorPicker extends Component {
+    constructor(props){
+        super(props);
+
+        /**
+         * The target being dragged
+         * @member {HTMLElement}
+         */
+        this.target = null;
+
+        /**
+         * Starting color
+         */
+        this.initColor = props.color;
+
+        // Reset the state
+        this.reset(props.color, false);
+
+        // Bind functions
+        this.stopSaturation = this.stopSaturation.bind(this);
+        this.updateSaturation = this.updateSaturation.bind(this);
+        this.stopHue = this.stopHue.bind(this);
+        this.updateHue = this.updateHue.bind(this);
+    }
+
+    /**
+     * Convert hex string #ffffff to hsv values
+     * @param {string} hexString
+     * @return {number[]}
+     */
+    hexToHsv(hexString) {
+        let hex = parseInt(hexString.substr(1), 16);
+        let r = ((hex >> 16) & 0xFF) / 255;
+        let g = ((hex >> 8) & 0xFF) / 255;
+        let b = (hex & 0xFF) / 255;
+
+        let max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s, v = max;
+        let d = max - min;
+        s = max == 0 ? 0 : d / max;
+
+        if (max == min) {
+            h = 0; // achromatic
+        }
+        else {
+            switch (max) {
+                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                case g: h = (b - r) / d + 2; break;
+                case b: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+        }
+        return [ h, s, v ];
+    }
+
+    /**
+     * Convert HSV values to hex string
+     * @param {number[]} hsv
+     * @return {string} Color as #ffffff
+     */
+    hsvToHex(h, s, v){
+        let r, g, b;
+        let i = Math.floor(h * 6);
+        let f = h * 6 - i;
+        let p = v * (1 - s);
+        let q = v * (1 - f * s);
+        let t = v * (1 - (1 - f) * s);
+        switch (i % 6) {
+            case 0: r = v, g = t, b = p; break;
+            case 1: r = q, g = v, b = p; break;
+            case 2: r = p, g = v, b = t; break;
+            case 3: r = p, g = q, b = v; break;
+            case 4: r = t, g = p, b = v; break;
+            case 5: r = v, g = p, b = q; break;
+        }
+        let hex = (((r * 255) << 16) + ((g * 255) << 8) + (b * 255 | 0));
+        hex = hex.toString(16);
+        hex = '000000'.substr(0, 6 - hex.length) + hex;
+        return `#${hex}`;
+    }
+
+    /**
+     * Update the saturation
+     */
+    startSaturation(event) {
+        this.target = event.currentTarget;
+        this.updateSaturation(event);
+        window.addEventListener('pointermove', this.updateSaturation);
+        window.addEventListener('pointerup', this.stopSaturation);
+    }
+
+    /**
+     * Stop setting the saturation
+     */
+    stopSaturation(event) {
+        event.stopPropagation();
+        window.removeEventListener('pointerup', this.stopSaturation);
+        window.removeEventListener('pointermove', this.updateSaturation);
+        this.target = null;
+    }
+
+    /**
+     * Clamp value from 0 to 1
+     * @param {number} val
+     * @return {number}
+     */
+    clamp(val) {
+        return Math.min(1, Math.max(0, val));
+    }
+
+    /**
+     * Update the saturation
+     * @param {Event} event
+     */
+    updateSaturation(event) {
+        event.stopPropagation();
+        const {left, top} = this.target.getBoundingClientRect();
+        const saturation = this.clamp((event.clientX - left) / this.target.clientWidth);
+        const value = 1 - this.clamp((event.clientY - top) / this.target.clientHeight);
+        const { hue } = this.state;
+        const hex = this.hsvToHex(hue, saturation, value);
+        this.update(hex);
+        this.setState({
+            hex,
+            value,
+            saturation
+        });
+    }
+
+    /**
+     * Handle hue changes
+     */
+    startHue(event) {
+        this.target = event.currentTarget;
+        this.updateHue(event);
+        window.addEventListener('pointerup', this.stopHue);
+        window.addEventListener('pointermove', this.updateHue);
+    }
+
+    /**
+     * Stop setting the saturation
+     */
+    stopHue(event) {
+        event.stopPropagation();
+        window.removeEventListener('pointerup', this.stopHue);
+        window.removeEventListener('pointermove', this.updateHue);
+        this.target = null;
+    }
+
+    /**
+     * Update the hue
+     * @param {Event} event
+     */
+    updateHue(event) {
+        event.stopPropagation();
+        const {top} = this.target.getBoundingClientRect();
+        const hue = 1 - this.clamp((event.clientY - top) / this.target.clientHeight);
+        const { value, saturation } = this.state;
+        const hueHex = this.hsvToHex(hue, 1, 1);
+        const hex = this.hsvToHex(hue, saturation, value);
+        this.update(hex);
+        this.setState({
+            hex,
+            hue,
+            hueHex
+        });
+    }
+
+    /**
+     * Internally update the
+     */
+    update(hex) {
+        if (this.state.hex !== hex) {
+            this.props.onUpdate(hex);
+        }
+    }
+
+    /**
+     * Revert to the original color
+     */
+    reset(hex, update) {
+        const [ hue, saturation, value ] = this.hexToHsv(hex);
+        const hueHex = this.hsvToHex(hue, 1, 1);
+        if (update !== false) {
+            this.update(hex);
+        }
+        this.setState({
+            hex,
+            hue,
+            hueHex,
+            saturation,
+            value
+        });
+    }
+
+    /**
+     * Reset to the original color
+     */
+    onReset() {
+        this.reset(this.initColor);
+        this.forceUpdate();
+    }
+
+    /**
+     * Handle manual text input
+     */
+    onInput(event) {
+        const hex = event.currentTarget.value;
+        // don't do anything if not a valid color
+        if (!/^#[a-f0-9]{6}$/i.test(hex)) {
+            return;
+        }
+        this.reset(hex);
+    }
+
+    render({ color }, { hex, hue, hueHex, saturation, value }) {
+        return h('div', { class: 'colorpicker mx-auto rounded' }, [
+            h('div', {
+                class: 'colorpicker-saturation',
+                style: `background-color:${hueHex}`,
+                onPointerDown: this.startSaturation.bind(this) },
+                h('div', {
+                    class: 'colorpicker-saturation-guide',
+                    style: `top:${(1 - value) * 100}%;left:${saturation * 100}%`
+                })
+            ),
+            h('div', {
+                class: 'colorpicker-hue',
+                onPointerDown: this.startHue.bind(this) },
+                h('div', {
+                    class: 'colorpicker-hue-guide',
+                    style: `top:${(1 - hue)*100}%`
+                })
+            ),
+            h('div', {
+                class: 'colorpicker-previous',
+                style: `background:${this.initColor}`,
+                onClick: this.onReset.bind(this)
+            }),
+            h('div', {
+                class: 'colorpicker-current',
+                style: `background:${hex}`
+            }),
+            h('input', {
+                class: 'form-control form-control-sm colorpicker-output',
+                value: hex,
+                onInput: this.onInput.bind(this)
+            })
+        ]);
+    }
+}
+
 
 /**
  * Either a gradient color or alpha swatc
