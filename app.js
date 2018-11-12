@@ -25,6 +25,12 @@ class App extends Component {
         this.canvas = null;
 
         /**
+         * Reference to the websocket connection
+         * @member {WebSocketForm}
+         */
+        this.socketRef = null;
+
+        /**
          * Image preview
          * @member {HTMLImageElement}
          */
@@ -186,7 +192,7 @@ class App extends Component {
             ctx.getImageData(0, 0, 1, height);
 
         // Calculate the steps at hex numbers
-        const steps = [];
+        let steps = [];
         for (let i = 0; i < imageData.data.length / 4; i++) {
             const r = imageData.data[(i*4)];
             const g = imageData.data[(i*4)+1];
@@ -209,6 +215,17 @@ class App extends Component {
         this.redrawCanvas(this.preview, color, alpha, true);
         this.imageRef.setState({ value: src });
         this.stepsRef.setState({ value: `[\n  ${steps.join(',\n  ')} \n]` });
+
+        if (format === App.FORMATS.UINT) {
+            steps = steps.map(step => parseInt(step));
+        }
+        else if (format === App.FORMATS.ARRAY) {
+            steps = steps.map(step => JSON.parse(step));
+        }
+        else {
+            steps = steps.map(step => step.substring(1, step.length - 1));
+        }
+        this.socketRef.send(src, steps);
     }
 
     /**
@@ -522,6 +539,14 @@ class App extends Component {
                         )
                     ])
                 )
+            ]),
+            h('div', { class: 'row'}, [
+                h('div', { class: 'col-sm-8 offset-sm-2 mb-4' }, [
+                    h(WebSocketForm, {
+                        onOpen: this.redraw.bind(this),
+                        ref: (ref) => this.socketRef = ref
+                    })
+                ])
             ])
         );
     }
@@ -537,6 +562,107 @@ App.FORMATS = {
     ARRAY: 2,
     CSS: 3
 };
+
+/**
+ * Form to connect via websocket to set image and step data
+ * @class
+ */
+class WebSocketForm extends Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            socket: null,
+            connecting: false,
+            address: localStorage.getItem(WebSocketForm.SAVE_KEY) || ''
+        };
+    }
+    onConnect() {
+        const {address} = this.state;
+        if (!address) {
+            return;
+        }
+        this.setState({ connecting: true });
+        const socket = new WebSocket(address);
+        socket.onopen = () => {
+            console.log('Socket connection is opened');
+            this.setState({ socket, connecting: false });
+            this.props.onOpen();
+        };
+        socket.onclose = () => {
+            this.cleanupConnect();
+        };
+        socket.onerror = (err) => {
+            console.error(err);
+            this.cleanupConnect();
+        };
+    }
+
+    /**
+     * Send updates to the socket
+     * @param {string} image - base64 image
+     * @param {number[]} steps - list of steps
+     */
+    send(image, steps) {
+        const {socket} = this.state;
+        if (socket) {
+            socket.send(JSON.stringify({ image, steps }));
+        }
+    }
+
+    cleanupConnect() {
+        const {socket} = this.state;
+        if (socket) {
+            socket.onopen = null;
+            socket.onclose = null;
+            socket.onerror = null;
+        }
+        this.setState({ socket: null, connecting: false });
+    }
+
+    onInput(event) {
+        const {value} = event.currentTarget;
+        const key = WebSocketForm.SAVE_KEY;
+        if (!value) {
+            localStorage.removeItem(key);
+        }
+        else {
+            localStorage.setItem(key, value);
+        }
+        this.setState({ address: value });
+    }
+
+    render(props, { address, socket, connecting }) {
+        return h('div', null, [
+            h('h2', { class: 'mb-2' }, [h(Icon, {type: 'plug' }), 'WebSocket']),
+            h('div', { class: 'input-group input-group-sm mb-2' }, [
+                h('span', { class: 'input-group-prepend'},
+                    h('span', { class: 'input-group-text px-3'}, 'Address')
+                ),
+                h('input', {
+                    onInput: this.onInput.bind(this),
+                    class: 'form-control form-control-sm',
+                    placeholder: 'ws://localhost:3000',
+                    value: address,
+                    disabled: !!socket,
+                    type: 'text' }),
+                h('span', { class: 'input-group-append' }, 
+                    ( socket === null && h('button', {
+                        disabled: connecting,
+                        class: 'btn btn-outline-primary btn-sm px-3',
+                        onClick: this.onConnect.bind(this)
+                    }, ( connecting ? 'Connecting...' : 'Connect' ))),
+                    ( socket && h('button', {
+                        class: 'btn btn-outline-danger btn-sm px-3',
+                        onClick: socket.close.bind(socket, 1000)
+                    }, [h(Icon, {type: 'close'}), 'Close'] ))
+                )
+            ])
+        ]);
+    }
+}
+
+// localStorage key name
+WebSocketForm.SAVE_KEY = 'ws-address';
 
 class FormatButton extends Component {
     render({ active, onClick, children }) {
